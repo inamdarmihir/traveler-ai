@@ -1,9 +1,11 @@
-"""
-Main module for the Travel Itinerary Planner multi-agent system.
-This module orchestrates the agents and tasks to create a travel itinerary.
-"""
-
 import os
+import sys
+
+# Add this at the top of main.py
+# This will prevent ChromaDB from being imported
+os.environ["CREWAI_DISABLE_MEMORY"] = "true"
+
+# Rest of your imports
 import json
 from datetime import datetime
 from dotenv import load_dotenv
@@ -31,117 +33,106 @@ class TravelPlannerSystem:
         self.agents = None
         self.tasks = None
         self.crew = None
-        self.result = None
         
-        # Initialize agents
-        try:
-            self.agents = create_agents(verbose=verbose)
-            print("✅ Agents initialized successfully")
-        except Exception as e:
-            print(f"❌ Error initializing agents: {e}")
-            raise
+        # Create output directory if it doesn't exist
+        os.makedirs("travel_plans", exist_ok=True)
     
-    def plan_trip(self, destination=None, start_date=None, end_date=None, budget=None, 
-                 interests=None, accommodation_preferences=None, 
-                 transportation_preferences=None, travelers=None):
+    def initialize(self, travel_preferences):
         """
-        Plan a trip based on the provided parameters.
+        Initialize the agents, tasks, and crew based on travel preferences.
         
         Args:
-            destination: Destination for the trip (optional)
-            start_date: Start date of the trip
-            end_date: End date of the trip
-            budget: Budget for the trip
-            interests: Traveler interests
-            accommodation_preferences: Accommodation preferences
-            transportation_preferences: Transportation preferences
-            travelers: Number of travelers
+            travel_preferences: Dictionary containing user's travel preferences.
+        """
+        # Create agents
+        self.agents = create_agents(verbose=self.verbose)
+        
+        # Create tasks with the travel preferences
+        self.tasks = create_tasks(self.agents, travel_preferences)
+        
+        # Create the crew
+        self.crew = Crew(
+            agents=list(self.agents.values()),
+            tasks=self.tasks,
+            verbose=self.verbose,
+            process=Process.sequential  # Tasks will be executed in sequence
+        )
+    
+    def kickoff(self, travel_preferences):
+        """
+        Start the travel planning process.
+        
+        Args:
+            travel_preferences: Dictionary containing user's travel preferences.
             
         Returns:
             The final travel itinerary as a string.
         """
-        try:
-            # Create tasks
-            self.tasks = create_tasks(
-                self.agents,
-                destination=destination,
-                start_date=start_date,
-                end_date=end_date,
-                budget=budget,
-                interests=interests,
-                accommodation_preferences=accommodation_preferences,
-                transportation_preferences=transportation_preferences,
-                travelers=travelers
-            )
-            print("✅ Tasks created successfully")
-            
-            # Create crew
-            self.crew = Crew(
-                agents=list(self.agents.values()),
-                tasks=self.tasks,
-                verbose=self.verbose,
-                process=Process.sequential  # Use sequential process for predictable workflow
-            )
-            print("✅ Crew initialized successfully")
-            
-            # Run the crew
-            print("🚀 Starting travel planning process...")
-            self.result = self.crew.kickoff()
-            
-            # Save the result
-            self._save_result(destination)
-            
-            return self.result
-            
-        except Exception as e:
-            print(f"❌ Error planning trip: {e}")
-            raise
+        # Initialize the system
+        self.initialize(travel_preferences)
+        
+        # Run the crew to generate the itinerary
+        result = self.crew.kickoff()
+        
+        # Save the itinerary to a file
+        filename = self._save_itinerary(result, travel_preferences)
+        
+        return result, filename
     
-    def _save_result(self, destination):
+    def _save_itinerary(self, itinerary, preferences):
         """
-        Save the result to a file.
+        Save the generated itinerary to a file.
         
         Args:
-            destination: Destination for the trip, used in the filename.
+            itinerary: The generated travel itinerary as a string.
+            preferences: Dictionary containing user's travel preferences.
+            
+        Returns:
+            The filename of the saved itinerary.
         """
-        if not self.result:
-            return
+        # Create a filename based on destination and date
+        destination = preferences.get("destination", "Custom")
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"travel_plans/{destination.replace(' ', '_')}_{timestamp}.md"
         
-        try:
-            # Create directory if it doesn't exist
-            os.makedirs("travel_plans", exist_ok=True)
-            
-            # Generate filename
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            dest_str = destination.replace(" ", "_") if destination else "trip"
-            filename = f"travel_plans/{dest_str}_{timestamp}.md"
-            
-            # Save to file
-            with open(filename, "w") as f:
-                f.write(self.result)
-            
-            print(f"✅ Travel plan saved to {filename}")
-            return filename
-        except Exception as e:
-            print(f"⚠️ Error saving result: {e}")
-            return None
+        # Add a header with the travel preferences
+        header = "# Travel Itinerary\n\n"
+        header += "## Travel Preferences\n\n"
+        
+        for key, value in preferences.items():
+            formatted_key = key.replace('_', ' ').title()
+            if isinstance(value, list):
+                formatted_value = ", ".join(value)
+            else:
+                formatted_value = str(value)
+            header += f"- **{formatted_key}:** {formatted_value}\n"
+        
+        header += "\n## Itinerary\n\n"
+        
+        # Write the itinerary to the file
+        with open(filename, "w", encoding="utf-8") as f:
+            f.write(header + itinerary)
+        
+        return filename
 
 # Example usage
 if __name__ == "__main__":
-    # Initialize the system
+    # Example travel preferences
+    example_preferences = {
+        "destination": "Japan",
+        "travel_dates": "June 10-20, 2024",
+        "duration": "10 days",
+        "budget": "$3000 USD",
+        "travelers": "2 adults",
+        "interests": ["culture", "food", "nature", "history"],
+        "accommodation_type": "mid-range hotels",
+        "pace": "moderate"
+    }
+    
+    # Create and run the travel planner
     planner = TravelPlannerSystem(verbose=True)
+    itinerary, filename = planner.kickoff(example_preferences)
     
-    # Example trip parameters
-    result = planner.plan_trip(
-        destination="Tokyo, Japan",
-        start_date="2025-06-15",
-        end_date="2025-06-22",
-        budget="Medium (around $2000 per person)",
-        interests="Technology, Food, Culture, Shopping",
-        accommodation_preferences="Mid-range hotel or Airbnb, central location",
-        transportation_preferences="Public transit, walking",
-        travelers="2 adults"
-    )
-    
-    print("\n==== FINAL ITINERARY ====\n")
-    print(result)
+    print(f"\nTravel itinerary saved to: {filename}")
+    print("\nItinerary Preview:")
+    print(itinerary[:500] + "...")
