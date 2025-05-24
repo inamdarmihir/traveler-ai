@@ -78,6 +78,46 @@ class TravelPlannerSystem:
         filename = self._save_itinerary(result, travel_preferences)
         
         return result, filename
+        
+    def plan_trip(self, destination, start_date, end_date, budget, interests, accommodation_preferences, transportation_preferences, travelers):
+        """
+        Plan a trip based on the provided parameters.
+        This method is used by the Streamlit app.
+        
+        Args:
+            destination: The destination for the trip.
+            start_date: The start date of the trip.
+            end_date: The end date of the trip.
+            budget: The budget for the trip.
+            interests: The interests for activities.
+            accommodation_preferences: Preferences for accommodation.
+            transportation_preferences: Preferences for transportation.
+            travelers: Number of travelers.
+            
+        Returns:
+            The final travel itinerary as a string.
+        """
+        # Format the travel preferences
+        travel_dates = f"{start_date} to {end_date}"
+        start_date_obj = datetime.strptime(start_date, "%Y-%m-%d")
+        end_date_obj = datetime.strptime(end_date, "%Y-%m-%d")
+        duration = (end_date_obj - start_date_obj).days
+        
+        travel_preferences = {
+            "destination": destination,
+            "travel_dates": travel_dates,
+            "duration": f"{duration} days",
+            "budget": budget,
+            "travelers": travelers,
+            "interests": interests.split(", "),
+            "accommodation_type": accommodation_preferences,
+            "transportation": transportation_preferences
+        }
+        
+        # Use the existing kickoff method
+        result, _ = self.kickoff(travel_preferences)
+        
+        return result
     
     def _save_itinerary(self, itinerary, preferences):
         """
